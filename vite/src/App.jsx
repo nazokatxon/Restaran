@@ -1,122 +1,174 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-function App() {
-  const [count, setCount] = useState(0)
+// AuthContext va AuthProvider ni bitta joydan import qilamiz
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+// Importlardagi ortiqcha nuqtalar olib tashlandi va yo'llar toza ko'rinishga keltirildi
+import Login from "./Login";
+import CafeList from "./pages/BigAdmin/CafeListTemp";
+import Analytics from "./pages/Admin/Analitika";
+import MenuManager from "./pages/Admin/MenuManager";
+import StaffList from "./pages/Admin/StaffListTemp";
+import TableGrid from "./pages/Waiter/TableGrid";
+import OrderForm from "./pages/Waiter/OrderForm";
+import KitchenQueue from "./pages/Chef/KitchenQueue";
+import Billing from "./pages/Cashier/Billing";
+import ErrorBoundary from "./ErrorBoundary";
 
-      <div className="ticks"></div>
+// Rolga qarab ruxsat berish uchun wrapper komponent
+function ProtectedRoute({ children, allowedRoles }) {
+  const { user, role, loading } = useAuth();
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-lg font-semibold">Yuklanmoqda...</p>
+      </div>
+    );
+  }
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
 }
 
-export default App
+// Foydalanuvchi rolga qarab bosh sahifaga yo'naltiriladi
+function RoleRedirect() {
+  const { user, role, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+
+  switch (role) {
+    case "bigadmin":
+      return <Navigate to="/bigadmin/cafes" replace />;
+
+    case "admin":
+      return <Navigate to="/admin/analytics" replace />;
+
+    case "waiter":
+      return <Navigate to="/waiter/tables" replace />;
+
+    case "chef":
+      return <Navigate to="/chef/queue" replace />;
+
+    case "cashier":
+      return <Navigate to="/cashier/billing" replace />;
+
+    default:
+      return <Navigate to="/login" replace />;
+  }
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Kirish sahifasi */}
+      <Route path="/login" element={<Login />} />
+
+      {/* Bosh sahifa - rolga qarab yo'naltirish */}
+      <Route path="/" element={<RoleRedirect />} />
+
+      {/* Big Admin paneli */}
+      <Route
+        path="/bigadmin/cafes"
+        element={
+          <ProtectedRoute allowedRoles={["bigadmin"]}>
+            <CafeList />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin paneli */}
+      <Route
+        path="/admin/analytics"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Analytics />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/menu"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <MenuManager />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/staff"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <StaffList />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Ofitsiant paneli */}
+      <Route
+        path="/waiter/tables"
+        element={
+          <ProtectedRoute allowedRoles={["waiter"]}>
+            <TableGrid />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/waiter/order"
+        element={
+          <ProtectedRoute allowedRoles={["waiter"]}>
+            <OrderForm />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Oshpaz paneli */}
+      <Route
+        path="/chef/queue"
+        element={
+          <ProtectedRoute allowedRoles={["chef"]}>
+            <KitchenQueue />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Kassa paneli */}
+      <Route
+        path="/cashier/billing"
+        element={
+          <ProtectedRoute allowedRoles={["cashier"]}>
+            <Billing />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Nomaʼlum manzillar uchun bosh sahifaga qaytarish */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+    </ErrorBoundary>
+  );
+}
+
+export default App;
