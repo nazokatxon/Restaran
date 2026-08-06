@@ -1,10 +1,9 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// AuthContext va AuthProvider ni bitta joydan import qilamiz
+// AuthContext va AuthProvider ni bitta joydan import qilish
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-// Importlardagi ortiqcha nuqtalar olib tashlandi va yo'llar toza ko'rinishga keltirildi
 import Login from "./Login";
 import CafeList from "./pages/BigAdmin/CafeListTemp";
 import Analytics from "./pages/Admin/Analitika";
@@ -163,7 +162,12 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
           <AppRoutes />
         </BrowserRouter>
       </AuthProvider>

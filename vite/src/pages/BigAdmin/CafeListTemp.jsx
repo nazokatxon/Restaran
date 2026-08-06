@@ -6,7 +6,7 @@ import {
   doc,
   addDoc,
 } from "firebase/firestore";
-import { db } from "../../firebase/config.js";
+import { db } from "../../Firebase/config.js";
 import Navbar from "../../components/Navbar.jsx";
 
 export default function CafeList() {

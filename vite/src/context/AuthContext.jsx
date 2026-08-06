@@ -1,10 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-} from "firebase/auth";
 import { toast } from "react-toastify";
 import {
   doc,
@@ -14,10 +8,12 @@ import {
   collection,
   query,
   where,
+  getDocs,
   onSnapshot,
   updateDoc,
 } from "firebase/firestore";
-import { auth, db, secondaryAuth } from "../firebase/config.js";
+
+import { db } from "../Firebase/config";
 
 const AuthContext = createContext();
 
@@ -29,135 +25,148 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [cafeId, setCafeId] = useState(null);
-  const [cafeName, setCafeName] = useState(""); // Kafe nomi uchun state
+  const [cafeName, setCafeName] = useState("");
   const [loading, setLoading] = useState(true);
   const audioCtxRef = useRef(null);
 
-  // Kafe ma'lumotlarini Firestore'dan olish
+  useEffect(() => {
+    const savedUser = localStorage.getItem("app_user");
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+        setRole(parsedUser.role || parsedUser.rol || null);
+        setCafeId(parsedUser.cafeId || null);
+        setCafeName(parsedUser.cafeName || "");
+      } catch (err) {
+        console.error("Saqlangan foydalanuvchini o'qishda xatolik:", err);
+        localStorage.removeItem("app_user");
+      }
+    }
+    setLoading(false);
+  }, []);
+
   const fetchCafeData = async (currentCafeId) => {
     if (!currentCafeId) {
       setCafeName("");
-      return;
+      return "";
     }
     try {
       const cafeDocRef = doc(db, "cafes", currentCafeId);
       const cafeDocSnap = await getDoc(cafeDocRef);
       if (cafeDocSnap.exists()) {
         const cData = cafeDocSnap.data();
-        setCafeName(cData.name || cData.title || "Kafe");
-      } else {
-        setCafeName("");
+        const cName = cData.name || cData.title || "Kafe";
+        setCafeName(cName);
+        return cName;
       }
     } catch (error) {
       console.error("Kafe ma'lumotlarini olishda xatolik:", error);
-      setCafeName("");
     }
+    setCafeName("");
+    return "";
   };
 
-  // Foydalanuvchi ma'lumotlarini Firestore'dan olish
-  const fetchUserData = async (uid) => {
-    try {
-      const userDocRef = doc(db, "users", uid);
-      const userDocSnap = await getDoc(userDocRef);
-      if (userDocSnap.exists()) {
-        const data = userDocSnap.data();
-        setRole(data.role || null);
-        setCafeId(data.cafeId || null);
-        
-        // Kafe nomini yuklash
-        if (data.cafeId) {
-          await fetchCafeData(data.cafeId);
-        }
+  const login = async (username, password) => {
+    const cleanUsername = username ? username.trim() : "";
+    const cleanPassword = password ? password.trim() : "";
 
-        return data;
-      } else {
-        setRole(null);
-        setCafeId(null);
-        setCafeName("");
-        return null;
-      }
-    } catch (error) {
-      console.error("Foydalanuvchi ma'lumotlarini olishda xatolik:", error);
-      setRole(null);
-      setCafeId(null);
-      setCafeName("");
-      return null;
+    if (!cleanUsername || !cleanPassword) {
+      throw new Error("Login va parolni kiriting!");
     }
-  };
 
-  // Ro'yxatdan o'tish
-  const register = async (email, password) => {
-    const userCredential = await createUserWithEmailAndPassword(
-      auth,
-      email,
-      password
+    // 1. Avval Firestore'dan mos username bo'yicha qidiramiz
+    const q = query(
+      collection(db, "users"),
+      where("username", "==", cleanUsername)
     );
-    return userCredential.user;
-  };
 
-  // XODIM YARATISH (Admin yoki Manager uchun)
-  const registerStaff = async (email, password, extraData = {}) => {
-    if (!secondaryAuth) {
-      console.error("secondaryAuth Firebase config faylida topilmadi!");
-      throw new Error("Firebase secondaryAuth sozlanmagan.");
+    let querySnapshot = await getDocs(q);
+    let userData = null;
+    let userId = null;
+
+    if (!querySnapshot.empty) {
+      const docSnap = querySnapshot.docs[0];
+      userData = docSnap.data();
+      userId = docSnap.id;
+    } else {
+      // 2. Agar topilmasa, harflar registri (katta-kichik) bo'yicha barcha users'ni tekshiramiz
+      const allSnapshot = await getDocs(collection(db, "users"));
+      allSnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.username && data.username.trim().toLowerCase() === cleanUsername.toLowerCase()) {
+          userData = data;
+          userId = docSnap.id;
+        }
+      });
     }
 
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        email,
-        password
-      );
-      const newUser = userCredential.user;
+    if (!userData) {
+      throw new Error("Foydalanuvchi topilmadi");
+    }
 
-      await setDoc(doc(db, "users", newUser.uid), {
-        email,
-        fullName: extraData.fullName || "",
+    if (String(userData.password).trim() !== cleanPassword) {
+      throw new Error("Parol noto'g'ri");
+    }
+
+    const userRole = userData.role || userData.rol || "chef";
+    const uCafeId = userData.cafeId ? String(userData.cafeId).trim() : null;
+    
+    let fetchedCafeName = "";
+    if (uCafeId) {
+      try {
+        fetchedCafeName = await fetchCafeData(uCafeId);
+      } catch (e) {
+        console.error("Kafe nomini olishda xato:", e);
+      }
+    }
+
+    const userObject = {
+      uid: userId,
+      username: userData.username,
+      role: userRole,
+      cafeId: uCafeId,
+      cafeName: fetchedCafeName,
+      ...userData,
+    };
+
+    setUser(userObject);
+    setRole(userRole);
+    setCafeId(uCafeId);
+    localStorage.setItem("app_user", JSON.stringify(userObject));
+
+    return userRole;
+  };
+
+  const registerStaff = async (username, password, extraData = {}) => {
+    try {
+      const newDocRef = doc(collection(db, "users"));
+      const newStaff = {
+        username: username,
+        password: password,
         role: extraData.role || "waiter",
         cafeId: extraData.cafeId || cafeId,
-        phone: extraData.phone || "",
         status: extraData.status || "active",
         createdAt: serverTimestamp(),
-      });
+        ...extraData,
+      };
 
-      await signOut(secondaryAuth);
-      return newUser;
+      await setDoc(newDocRef, newStaff);
+      return { id: newDocRef.id, ...newStaff };
     } catch (error) {
       console.error("Xodim yaratishda xatolik:", error);
       throw error;
     }
   };
 
-  // Kirish funksiyasi
-  const login = async (email, password) => {
-    setLoading(true);
-    try {
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      const data = await fetchUserData(userCredential.user.uid);
-      setLoading(false);
-      return data?.role || null;
-    } catch (error) {
-      setLoading(false);
-      throw error;
-    }
-  };
-
-  // Chiqish
   const logout = async () => {
-    setLoading(true);
-    await signOut(auth);
+    localStorage.removeItem("app_user");
     setUser(null);
     setRole(null);
     setCafeId(null);
     setCafeName("");
-    setLoading(false);
   };
 
-  // Bildirishnoma ovozi
   const playOrderReadySound = async () => {
     try {
       if (!audioCtxRef.current) {
@@ -193,7 +202,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Ekran bosilganda audio kontekstni tayyorlash
   useEffect(() => {
     const unlockAudio = async () => {
       if (!audioCtxRef.current) {
@@ -215,9 +223,8 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  // Global xabarnoma: FAQAT OFITSIANT ning O'ZI YUBORGAN va tayyor bo'lgan buyurtmalarga xabar va ovoz beradi
   useEffect(() => {
-    if (!user || !cafeId || role !== "waiter") return;
+    if (!user || !cafeId || (role !== "waiter" && role !== "ofitsiant")) return;
 
     const q = query(
       collection(db, "orders"),
@@ -229,9 +236,9 @@ export function AuthProvider({ children }) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type !== "added" && change.type !== "modified") return;
-        
+
         const orderData = { id: change.doc.id, ...change.doc.data() };
-        
+
         if (orderData.waiterNotified) return;
 
         toast.info(`🛎 Stol №${orderData.tableNumber || "-"} uchun buyurtma tayyor!`, {
@@ -253,39 +260,20 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, [user, cafeId, role]);
 
-  // Auth holatini eshitib turish
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setLoading(true);
-      if (currentUser) {
-        setUser(currentUser);
-        await fetchUserData(currentUser.uid);
-      } else {
-        setUser(null);
-        setRole(null);
-        setCafeId(null);
-        setCafeName("");
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
   const value = {
     user,
     role,
     cafeId,
-    cafeName, // Endi butun ilova bo'ylab cafeName ishlatish mumkin
+    cafeName,
     loading,
     login,
-    register,
     registerStaff,
     logout,
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }

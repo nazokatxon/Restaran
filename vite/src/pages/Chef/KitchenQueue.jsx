@@ -7,7 +7,7 @@ import {
   updateDoc,
   doc,
 } from "firebase/firestore";
-import { db } from "../../firebase/config.js";
+import { db } from "../../Firebase/config.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 export default function KitchenQueue() {

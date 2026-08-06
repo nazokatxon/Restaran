@@ -5,7 +5,7 @@ import {
   where,
   onSnapshot,
 } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../Firebase/config";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Analytics() {
